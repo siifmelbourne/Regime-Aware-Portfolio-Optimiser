@@ -195,8 +195,8 @@ def main():
     ]
 
     # Load train/test files
-    train_path = "data/VAS_historical_train_data_engineered.csv"
-    test_path = "data/VAS_historical_test_data_engineered.csv"
+    train_path = "market_regime_model/data/VAS_historical_train_data_engineered.csv"
+    test_path = "market_regime_model/data/VAS_historical_test_data_engineered.csv"
 
     df_train = pd.read_csv(train_path)
     df_test = pd.read_csv(test_path)
@@ -264,7 +264,7 @@ def main():
 
     print(summary.to_string())
 
-    df_combined.to_csv("data/VAS_historical_data_with_three_states.csv", index=False)
+    df_combined.to_csv("market_regime_model/data/VAS_historical_data_with_three_states.csv", index=False)
 
     return df_combined, model
 
@@ -499,7 +499,7 @@ def plot_hmm_states(df_combined, model):
         bbox_to_anchor=(1.01, 1),
     )
     fig.tight_layout()
-    plt.savefig("data/VAS_historical_data_with_three_states.png", dpi=300, bbox_inches="tight")
+    plt.savefig("market_regime_model/data/VAS_historical_data_with_three_states.png", dpi=300, bbox_inches="tight")
     plt.show()
 
 

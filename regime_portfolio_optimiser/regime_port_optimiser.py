@@ -7,58 +7,161 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "market_regime_model"))
 from hmm_model import main as run_hmm
 
-def get_asset_data(stocks):
+def combine_log_returns(stocks):
     """
-    Fetch historical stock data from Yahoo Finance.
+    Combines log returns of stocks in portfolio into one dataframe.
 
     Args:
         stocks (list): List of stock ticker symbol.
 
     Returns:
-        stock_features (dict): A dictionary containing tuples of stock information and stock data 
         returns_combined (pd.DataFrame): A DataFrame containing the daily log returns for each stock.
     """
-    stock_features = {}
+
     returns_combined = pd.DataFrame()
     for stock in stocks: 
-        try: 
-            ticker_data = yf.Ticker(stock)
-            stock_info = ticker_data.info
-            df = ticker_data.history(start="2010-02-10")
-        except Exception as e:
-            print(f"Error fetching data for {stock}: {e}")
-            raise
+        df = pd.read_csv(f"regime_portfolio_optimiser/data/{stock}_historical_data_engineered.csv")
+        returns_combined[stock] = df["Daily Log Return"] 
 
-        n = int(np.ceil(df.shape[0]*0.05))
+    returns_combined.index = pd.to_datetime(df["Date"])
+    return returns_combined
 
-        df['Daily Log Return'] = df['Close'].pct_change().apply(lambda x: np.log(1 + x))
-        df['20-day Rolling Vol Annualised'] = df['Daily Log Return'].rolling(window=20).std() * (252 ** 0.5)
-        rolling_peak = df['Close'].rolling(window=20, min_periods=1).max()
-        df['Max Drawdown'] = (df['Close'] - rolling_peak) / rolling_peak
+def normalise_index(df1, df2, method="ffill"): 
+    """
+    Normalise index of datetime indexes
 
-        stock_info['Historical 95% CVaR'] = -df['Daily Log Return'].nsmallest(n).mean() # averages largest 5% losses to find CVaR (expressed positive)
-        stock_features[stock] = stock_info, df
-        returns_combined[stock] = df['Daily Log Return']
-    returns_combined.index = returns_combined.index.tz_localize(None).normalize() # normalise datetime index to match regime probabilities datetime index 
+    Args:
+        df1 (pd.DataFrame), df2 (pd.DataFrame): Pandas dataframes containing datetime index. 
+        method (str): Method of normalisation. 
+                reindex - Drops differing dates
+                ffill   - Forward fills dates (backward fills missing values which lead)
 
-    return stock_features, returns_combined
+    Returns:
+        df1_normalised (pd.DataFrame), df2_normalised (pd.DataFrame): Pandas dataframes with matching indexes
+    """
 
-def get_portfolio_statistics(returns, current_regime, weights, rf):
-    ...
+    # normalise datetime index conventions
+    df1_normalised = df1.copy()
+    df2_normalised = df2.copy()
+    df1_normalised.index = df1.index.tz_localize(None).normalize() 
+    df2_normalised.index = df2.index.tz_localize(None).normalize()
 
-def get_asset_behaviour(data, regimes):
-    ...
+    # deal with index mismatches based on method. just realised filling data is probably not viable for returns, probably reindex 
+    if (method == "reindex"):
+        df1_normalised, df2_normalised = df1_normalised.align(df2_normalised, join="inner", axis=0)
+    elif (method == "ffill"):
+        max_fill = 3
+        df1_normalised, df2_normalised = df1_normalised.align(df2_normalised, join="outer", axis=0)
+        df1_normalised = df1_normalised.ffill(axis=0, limit=max_fill).bfill(axis=0, limit=max_fill)
+        df2_normalised = df2_normalised.ffill(axis=0, limit=max_fill).bfill(axis=0, limit=max_fill)
+    else:
+        raise ValueError(f"Method should be ffill or reindex, got {method}")
 
-def optimise_weights(returns, regimes, method='CVaR'): 
+    valid = df1_normalised.notna().all(axis=1) & df2_normalised.notna().all(axis=1) # filter for valid fills  
+    df1_normalised = df1_normalised[valid]
+    df2_normalised = df2_normalised[valid]
+
+    return df1_normalised, df2_normalised
+
+def get_asset_behaviour(returns, regimes):
+    """
+    Computes asset behaviour (Expected Return, Volatility, Covariance of Assets) under each regime. 
+    
+    Args:
+        returns (pd.DataFrame): dataframe of log returns (date x returns for each asset)
+        regimes (pd.DataFrame): dataframe of regime probabilities (date x probabilities for each regime)
+ 
+    Returns:
+        regime_behaviour (dict[str, RegimeAssetBehaviour]): Dictionary of regimes which contain asset behaviour.
+    """ 
+
+    regime_behaviour = {}
+    for regime_name, regime_probs in regimes.items():
+        regime_behaviour[regime_name] = get_asset_behaviour_in_regime(returns, regime_probs)
+
+    return regime_behaviour
+
+def get_asset_behaviour_in_regime(returns, regime):
+    """
+    Computes historical asset behaviour (Expected Return, Volatility, Covariance of Assets - expressed in daily terms) under a specific regime, weighted based on regime probability.
+    
+    Args:
+        returns (pd.DataFrame): dataframe of log returns (date x returns for each asset)
+        regime (pd.Series): series of regime probabilities (date x probabilities for each regime)
+ 
+    Returns:
+        asset_behaviour (dict): dictionary of ev, vol and covar
+            ev (pd.Series): historic expected return of assets under regime
+            vol (pd.Series): historic volatility of assets under regime 
+            covar (pd.DataFrame): historic covariance of assets under regime 
+    """
+
+    total_proba = regime.sum()
+    normalised_weights = regime/total_proba
+    ev = returns.mul(regime, axis=0).sum()/total_proba
+    deviations = returns-ev
+    weighted_deviations = deviations.mul(normalised_weights, axis=0)
+    covar = deviations.T.dot(weighted_deviations)
+    var = pd.Series(np.diag(covar), index=ev.index)
+    vol = var ** 0.5
+
+    return {"ev": ev, "vol": vol, "covar": covar}
+
+def get_portfolio_statistics(asset_behaviour, current_regime_probs, weights):
+    """
+    Calculates portfolio statistics (expected return, variance, vol) given weights.
+    
+    Args:
+        asset_behaviour (dict): dictionary containing asset behaviour (expected returns, vol, covar) under each regime
+        current_regime_probs (np.ndarray): vector of regime probabilities today
+        weights (pd.Series): series of weights, indexed with stock ticker
+ 
+    Returns:
+        expected_return
+        var
+        vol
+    """
+
+    regime_returns = []
+    regime_vars = []
+    for behaviour in asset_behaviour.values():
+        regime_returns.append((behaviour["ev"]*weights).sum())
+        regime_vars.append(weights @ behaviour["covar"] @ weights)
+    regime_returns = pd.Series(regime_returns)
+    regime_vars = pd.Series(regime_vars)
+
+    expected_return = sum(
+    prob * regime_return #behaviour["ev"]: series of expected return for each stock, weights: series of weights for each stock
+    for prob, regime_return in zip(current_regime_probs, regime_returns)
+    )
+
+    deviation = regime_returns - expected_return
+    var_of_expectation = (current_regime_probs * (deviation ** 2)).sum()
+    # print(var_of_expectation) 
+    # is 0 when hmm_model is certain we are under one regime 
+    expectation_of_var = (regime_vars * current_regime_probs).sum()
+    # print(expectation_of_var)
+    total_var = var_of_expectation + expectation_of_var
+    # print(total_var)
+
+    ev_annualised = expected_return*(252)
+    var_annualised = total_var*(252)
+    vol_annualised = (total_var)**0.5 * (252**0.5)
+    print(f"\n-------------------------------------\nexpected return: {ev_annualised}")
+    print(f"-------------------------------------\nvariance: {var_annualised}")
+    print(f"-------------------------------------\nvolatility: {vol_annualised}\n-------------------------------------")
+
+    return ev_annualised, var_annualised, vol_annualised
+
+def optimise_weights(returns, regimes, method='CVaR', rf=0.05): 
     ...
 
 def main():
     stocks = ['AAPL', 'NVDA', 'MSFT']
-    weights = [.3, .4, .3]
-    rf = 0.05 # hardcode risk free rate for now 
-
-    if (len(stocks) != len(weights)): 
-        print("Number of stocks and weights should be equal")
+    try: 
+        weights = pd.Series([.7, .2, .1], index=stocks)
+    except Exception as e:
+        print("Invalid stocks/weights input")
         return -1
 
     df_combined, model = run_hmm()
@@ -75,29 +178,31 @@ def main():
         "Close_VIX",
     ] 
 
+    # get matrix of probabilities from market regime model, convert to pandas dataframe
     X_full = df_combined[feature_cols].values
     probs_matrix = model.predict_proba(X_full)
-
-    # make matrix of probabilities for each regime in each day
     regimes = pd.DataFrame(
     probs_matrix,
-    index=df_combined["Date"].dt.normalize(),
+    index=df_combined["Date"], # normalise datetime index to match returns datetime index 
     columns=[f"regime{i}" for i in range(model.n_components)]
     )
-    regimes.index = regimes.index.tz_localize(None)
-
     current_regime_probs = regimes.iloc[-1].values
     
-    stock_features, log_returns = get_asset_data(stocks)
-    print(f"{len(log_returns.index)}\n{print(len(regimes.index))}\n{print(len(log_returns.index.difference(regimes.index)))}\n{log_returns.index.difference(regimes.index)}")
-    # todo: either forward fill regimes missing in regimes index or drop the differing ones 
-    # get expected return and volatility of assets given current regime probs, covariance of assets under each regime. we use weighted returns, vol and covariance
-    # result_1, result_2, result_3 = get_asset_behaviour(data_combined, regimes)
-    # each r_i will be list of asset_returns, asset_vols, asset_covars under regime i  
-    # get expected return and volatility of portfolio given current regime probs. expected return = weighted average of returns under each regime, 
-    # port_return, port_vol = get_portfolio_statistics(adjusted_returns, current_regime_probs, weights, rf) 
-    # optimise_weights
+    log_returns = combine_log_returns(stocks)
+    log_returns, regimes = normalise_index(log_returns, regimes, method="reindex")
+
+    asset_behaviours = get_asset_behaviour(log_returns, regimes)
+    # print(asset_behaviours["regime0"]["covar"])
+
+    get_portfolio_statistics(asset_behaviours, current_regime_probs, weights)
+
+    # todo: 
+    # make optimising weight function 
     # return ... 
+
+    # to fix: got rid of stock info when separating downloading data from main file, fragment of sotck info in feature eng py file 
+    # stocks and weights are in both regime_port_optimiser and feature eng and data download umm
+    # make an exponential weighting in get_asset_behaviour_in_regime
 
 if __name__ == "__main__":
     main()

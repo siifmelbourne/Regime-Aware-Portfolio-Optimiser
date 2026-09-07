@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 # Read the historical data from the CSV file and compute additional features
-df = pd.read_csv("data/VAS_historical_data.csv")
+df = pd.read_csv("market_regime_model/data/VAS_historical_data.csv")
 
 #print(df.head())
 
@@ -31,7 +31,7 @@ macd_indicator = MACD(close=df['Close'], window_fast=12, window_slow=26, window_
 df['MACD'] = macd_indicator.macd()
 df['MACD Signal'] = macd_indicator.macd_signal()
 
-df_VIX = pd.read_csv("data/VIX_historical_data.csv")
+df_VIX = pd.read_csv("market_regime_model/data/VIX_historical_data.csv")
 df_VIX['Date'] = pd.to_datetime(df_VIX['Date'], utc=True)
 
 
@@ -94,5 +94,5 @@ df_test_scaled[scaled_cols] = pd.DataFrame(
 )
 
 # Save the scaled versions
-df_train_scaled.to_csv("data/VAS_historical_train_data_engineered.csv", index=False)
-df_test_scaled.to_csv("data/VAS_historical_test_data_engineered.csv", index=False)
+df_train_scaled.to_csv("market_regime_model/data/VAS_historical_train_data_engineered.csv", index=False)
+df_test_scaled.to_csv("market_regime_model/data/VAS_historical_test_data_engineered.csv", index=False)
