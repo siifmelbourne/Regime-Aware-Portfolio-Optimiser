@@ -177,7 +177,7 @@ def find_optimal_hmm_states(X_train, X_test, df_train, max_states=10):
     pd.set_option("display.max_columns", None)
     pd.set_option("display.width", 1000)
     pd.set_option("display.expand_frame_repr", False)
-    print(comparison_df)
+    # print(comparison_df)
 
 
 def main():
@@ -228,23 +228,23 @@ def main():
 
     results = evaluate_model(model, X_train, X_test, df_train)
 
-    print(f"Train Log Likelihood : {results['Train Log Likelihood']:.2f}")
-    print(f"Test Log Likelihood  : {results['Test Log Likelihood']:.2f}")
-    print(f"AIC                  : {results['AIC']:.2f}")
-    print(f"BIC                  : {results['BIC']:.2f}")
-    print(f"Average Duration     : {results['Average Regime Duration']:.2f}")
-    print(f"Number of Switches   : {results['Number of Switches']}")
+    # print(f"Train Log Likelihood : {results['Train Log Likelihood']:.2f}")
+    # print(f"Test Log Likelihood  : {results['Test Log Likelihood']:.2f}")
+    # print(f"AIC                  : {results['AIC']:.2f}")
+    # print(f"BIC                  : {results['BIC']:.2f}")
+    # print(f"Average Duration     : {results['Average Regime Duration']:.2f}")
+    # print(f"Number of Switches   : {results['Number of Switches']}")
 
-    print("\nTransition Matrix")
-    print(results["Transition Matrix"])
+    # print("\nTransition Matrix")
+    # print(results["Transition Matrix"])
 
-    print("\nState Summary")
-    print(results["State Summary"])
+    # print("\nState Summary")
+    # print(results["State Summary"])
 
 
 
     # Manually Evaluating and Looking at Model
-    print(model.transmat_)
+    # print(model.transmat_)
 
     summary = (
         df_train
@@ -262,7 +262,7 @@ def main():
     pd.set_option("display.width", 1000)
     pd.set_option("display.expand_frame_repr", False)
 
-    print(summary.to_string())
+    # print(summary.to_string())
 
     df_combined.to_csv("market_regime_model/data/VAS_historical_data_with_three_states.csv", index=False)
 

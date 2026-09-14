@@ -1,7 +1,7 @@
 import yfinance as yf
 import pandas as pd
 
-stocks = ['AAPL', 'NVDA', 'MSFT']
+stocks = ['AAPL', 'NVDA', 'MSFT', 'GOOGL', 'AMZN', 'JPM']
 
 for stock in stocks:
     try: 
