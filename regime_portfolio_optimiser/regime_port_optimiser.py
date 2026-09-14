@@ -309,14 +309,14 @@ def main():
     regime_portfolio.print_statistics(weights)
 
     # Print optimal portfolio statistics under each method 
-    # Note: CVaR method is more invariant for lambda compared to MVO method
-    # since behaviour is quadratic in w for MVO, non-linear for cvar
+    # Note: CVaR lambda and MVO lambda should be different
+    # since behaviour is quadratic in w for MVO, non-linear for cvar (CVaR is much larger than mean, causes weird behaviour)
     optimal_mvo_weights = regime_portfolio.optimise(weights, method='MVO')
     print("\n\nOptimal Portfolio Statistics:")
     print("\n\nMethod: MVO")
     regime_portfolio.print_statistics(optimal_mvo_weights)
 
-    optimal_cvar_weights = regime_portfolio.optimise(weights, method='CVaR')
+    optimal_cvar_weights = regime_portfolio.optimise(weights, method='CVaR', L=0.01)
     print("\n\nMethod: CVaR")
     regime_portfolio.print_statistics(optimal_cvar_weights)
 
