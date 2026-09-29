@@ -180,7 +180,11 @@ def find_optimal_hmm_states(X_train, X_test, df_train, max_states=10):
     # print(comparison_df)
 
 
-def main():
+def main(end_date=None):
+    if end_date is None:
+        end_date = pd.Timestamp.today().normalize().tz_localize('UTC')
+    else:
+        end_date = pd.to_datetime(end_date, utc=True)
 
     feature_cols = [
         "Daily Log Return_scaled",
@@ -197,10 +201,17 @@ def main():
     # Load train/test files
     train_path = "market_regime_model/data/VAS_historical_train_data_engineered.csv"
     test_path = "market_regime_model/data/VAS_historical_test_data_engineered.csv"
-
+    
     df_train = pd.read_csv(train_path)
     df_test = pd.read_csv(test_path)
+    
+    # Limit test data to date of interest
+    df_date = pd.to_datetime(df_test['Date'], utc=True)
+    df_test = df_test[df_date <= end_date]
 
+    if df_test.empty:
+        raise ValueError(f"No test data on or before {end_date.date()}")
+    
     # Prepare the feature matrix
     X_train = df_train[feature_cols].values
     X_test = df_test[feature_cols].values
