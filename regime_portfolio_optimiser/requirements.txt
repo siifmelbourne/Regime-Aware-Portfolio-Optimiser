@@ -1,6 +1,8 @@
-yfinance 
-pandas
+argparse
+matplotlib
 numpy
-sys
 os
+pandas
 scipy
+sys
+yfinance
