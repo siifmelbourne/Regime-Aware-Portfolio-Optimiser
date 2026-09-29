@@ -29,7 +29,9 @@ $$
 \mathrm{Cov}_j[\text{asset}_i, \text{asset}_k] = \frac{\sum_t p_{j,t} \left( r_{i,t} - \mu_{i,j} \right)\left( r_{k,t} - \mu_{k,j} \right)}{\sum_t p_{j,t}}
 $$
 
-**Portfolio statistics.** Overall expected return is the average of the regime-conditional returns, weighted by the current regime probabilities. Let $p_k$ be current probability of regime $k$
+**Portfolio statistics.** 
+
+Overall expected return is the average of the regime-conditional returns, weighted by the current regime probabilities. Let $p_k$ be current probability of regime $k$, $w$ be weight of stocks, $\mu_k$ be list of expected return of stocks in regime $k$. Then $w^\top \mu_k$ is the expected portfolio return in regime $k$. 
 
 $$
 \mu_p = \sum_{k=1}^{K} p_k \, w^\top \mu_k
@@ -37,12 +39,36 @@ $$
 Total variance (law of total variance):
 
 $$
-\sigma_p^2 = \sum_{k=1}^{K} p_k \, w^\top \Sigma_k w \;+\; \sum_{k=1}^{K} p_k \left( w^\top \mu_k - \mu_p \right)^2
+\sigma_p^2 = \mathrm{Var}(R) = E\left[\mathrm{Var}(R \mid K)\right] + \mathrm{Var}\left(E[R \mid K]\right)
 $$
 
+$$
+            = \sum_{k=1}^{K} p_k \, w^\top \Sigma_k w \;+\; \sum_{k=1}^{K} p_k \left( w^\top \mu_k - \mu_p \right)^2
+$$
+
+
 **Optimisation.**
-- Mean-Variance Optimisation (MVO)
-- Conditional Value-at-Risk (CVaR)
+- Mean-Variance Optimisation (MVO): 
+$$
+\max_{w} \;\; (\mu_p(w) - \lambda \, \sigma_p^2(w))
+\qquad \text{s.t.} \quad \sum_i w_i = 1, \;\; w_i \ge 0
+$$
+
+Adjusting lambda adjusts how much volatility matters in portfolio. 
+
+- Conditional Value-at-Risk (CVaR):
+
+Using 95% CVaR, take the average of $5$% worst losses (as positive number). 
+$\mathcal{W}_\alpha(w)$: the set of days $t$ with the $\lceil \alpha T \rceil$ lowest portfolio returns. Dependent on $w$, since different weights change which days are worst.
+
+$$
+\mathrm{CVaR}_\alpha(w) = -\frac{1}{|\mathcal{W}_\alpha(w)|} \sum_{t \in \mathcal{W}_\alpha(w)} w^\top r_t(w)
+$$
+
+$$
+\min_{w} \;\; \lambda \, \mathrm{CVaR}_\alpha(w) - \mu_p(w)
+\qquad \text{s.t.} \quad \sum_i w_i = 1, \;\; w_i \ge 0
+$$
 
 ## Limitations / TODO
 
@@ -51,7 +77,8 @@ $$
 - **Expanding-window backtest:** the expanding window can include regime data that is too outdated to be trusted. The same issue affects asset behaviour statistics, which use the full historical window. Will test a rolling window instead. 
 - **CVaR:** returns near equal-weight portfolios on most iterations. Possible causes:
   - CVaR iterates over full historic window instead of being regime aware
-  - Test other penalties instead of lambda=0.01 
+  - Test other penalties instead of lambda=0.01, other percentages? e.g. 97% CVaR 
   - Check SLSQP stopping early bug
 - **Industry constraints** Add industry constraints into optimisation pipeline. 
 - **Backtesting:** needs to be run on historical data from the investments team. Need to add performance against the original weighting in the matplotlib graph.
+- **documentation** add more documentation regarding max drawdown, sharpe ratio etc.
